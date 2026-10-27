@@ -9,7 +9,7 @@ using UnityEngine.Networking;
 public static class TrustedTime
 {
     private static DateTime anchorUtc; 
-    private static long anchorTimestamp;
+    private static long anchorTimestamp; 
     private static bool hasAnchor;
 
     public static void SetAnchor(DateTime networkUtc)
