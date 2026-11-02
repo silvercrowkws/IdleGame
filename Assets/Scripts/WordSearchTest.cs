@@ -3,6 +3,8 @@ using UnityEngine;
 
 public class WordSearchTest : MonoBehaviour
 {
+    [SerializeField] private Font font;   // 인스펙터에 MaruBuri-Regular.ttf 드래그
+
     private Vector2 scroll;
     private Rect dragArea;     // 스크롤 영역 (화면 GUI 좌표)
     private bool dragging;
@@ -132,9 +134,9 @@ public class WordSearchTest : MonoBehaviour
         }
 
         int fs = Mathf.RoundToInt(Screen.height * 0.035f);
-        var label = new GUIStyle(GUI.skin.label) { fontSize = fs, wordWrap = true };
-        var field = new GUIStyle(GUI.skin.textField) { fontSize = fs };
-        var button = new GUIStyle(GUI.skin.button) { fontSize = fs };
+        var label = new GUIStyle(GUI.skin.label) { fontSize = fs, wordWrap = true, font = font };
+        var field = new GUIStyle(GUI.skin.textField) { fontSize = fs, font = font };
+        var button = new GUIStyle(GUI.skin.button) { fontSize = fs, font = font };
         var title = new GUIStyle(label) { fontSize = Mathf.RoundToInt(fs * 1.5f), fontStyle = FontStyle.Bold };
 
         GUI.skin.verticalScrollbar.fixedWidth = fs * 0.8f;
