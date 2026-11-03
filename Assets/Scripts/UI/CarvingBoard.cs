@@ -7,7 +7,7 @@ using UnityEngine.UI;
 [RequireComponent(typeof(RawImage))]
 public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
 {
-    [SerializeField] private Texture2D surfaceTex;       // 나무 이미지
+    [SerializeField] public Texture2D surfaceTex;       // 나무 이미지
     [SerializeField] private RawImage carvedImage;       // 파낸 자국을 그릴 층
     [SerializeField] private int brushRadius = 12;       // 조각칼 굵기(이미지 픽셀)
     [SerializeField] private float maxStrokeLength = 150f;

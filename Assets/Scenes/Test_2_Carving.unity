@@ -3883,9 +3883,10 @@ MonoBehaviour:
   - {fileID: 8300000, guid: fa6171c4814b7fc4586312355845c973, type: 3}
   - {fileID: 8300000, guid: 481a96007452cc641940307df37cd10d, type: 3}
   - {fileID: 8300000, guid: df473bebc5633f449ab4e2bcfcead4c1, type: 3}
-  distPerSound: 50
   pitchRange: 0.04
   volume: 0.8
+  minMoveToStart: 3
+  overlapRatio: 0.85
 --- !u!82 &1796028736
 AudioSource:
   m_ObjectHideFlags: 0

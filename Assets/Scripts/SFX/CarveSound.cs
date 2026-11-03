@@ -45,7 +45,7 @@ public class CarveSound : MonoBehaviour
         if (moveAcc < minMoveToStart) return;
 
         moveAcc = 0f;
-        Play();
+        Play(); 
     }
 
     private void Play()
