@@ -11,26 +11,30 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     [SerializeField] private RawImage carvedImage;       // 파낸 자국을 그릴 층
     [SerializeField] private int brushRadius = 12;       // 조각칼 굵기(이미지 픽셀)
     [SerializeField] private float maxStrokeLength = 150f;
+    [SerializeField] private CarveSound carveSound;
     private float strokeUsed;
 
     [Header("조각 느낌")]
     [SerializeField, Range(0.01f, 0.3f)] private float carveStrength = 0.06f;
     [SerializeField, Range(0f, 1f)] private float roughness = 0.6f;
 
-    [Header("나무 조각")]
-    [SerializeField] private WoodChip chipPrefab;
+    [Header("나무 조각")]    
     [SerializeField] private int maxChips = 150;
     [SerializeField] private float chipsPerPixel = 0.15f;
 
     [Header("글자 가이드 / 판정")]
-    [SerializeField] private GlyphGuide glyphGuide;
-    [SerializeField] private string[] glyphs = { "ㄱ", "ㄴ", "ㅏ", "ㅓ" };   // 테스트용 글자 목록
+    [SerializeField] private GlyphGuide glyphGuide;    
     [SerializeField, Range(0.3f, 1f)] private float requiredCoverage = 0.8f;   // 이만큼 이상 파야 성공
     [SerializeField, Range(0.05f, 1f)] private float maxOvershoot = 0.3f;      // 벗어남이 이 값 미만이어야 성공
 
     public event System.Action<string, float, string> OnCarved;   // (글자, 정확도, 등급) 완성 신호
 
-    private int glyphIndex;
+    private string currentGlyph = "";
+    private CanvasGroup group;
+
+    public event System.Action OnClosed;   // Board가 닫힐 때 알리는 신호
+    public bool IsOpen { get; private set; }
+
     private bool finished;
     [SerializeField] private TMP_Text resultText;
 
@@ -88,11 +92,9 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
 
         carvedImage.texture = result;
         carvedImage.color = Color.white;
-    }
 
-    private void Start()
-    {
-        if (glyphGuide != null) Begin(glyphGuide.Show(glyphs[0]));
+        group = GetComponent<CanvasGroup>();
+        SetVisible(false);   // 처음엔 숨김
     }
 
     // 새 글자로 시작 (판을 깨끗이 비우고 판정 기준을 갱신)
@@ -123,8 +125,7 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         result.SetPixels32(clearPixels);
         result.Apply();
 
-        foreach (var c in chips) if (c != null) Destroy(c.gameObject);
-        chips.Clear();
+        ClearChips();
 
         UpdateResultText();
     }
@@ -134,6 +135,9 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     {
         if (finished) return;       // 완성 뒤 더 파기 금지
         strokeUsed = 0f;
+
+        if (carveSound != null) carveSound.StartStroke();
+
         hasLast = false;
         if (ToPixel(e, out Vector2Int p))
         {
@@ -162,6 +166,9 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
 
         CarveLine(from, p);
         SpawnChips(lastLocal, dist);
+
+        if (carveSound != null) carveSound.Feed(dist);
+
         strokeUsed += dist;
         last = p;
         hasLast = true;
@@ -244,23 +251,20 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     // ---------- 나무 조각 ----------
     private void SpawnChips(Vector2 localPos, float dist)
     {
-        if (chipPrefab == null) return;
-
         chipAcc += dist * chipsPerPixel;
         while (chipAcc >= 1f)
         {
             chipAcc -= 1f;
 
-            WoodChip c;
+            // 한도를 넘으면 가장 오래된 조각을 풀로 돌려보낸다
             if (chips.Count >= maxChips)
             {
-                c = chips[0];
+                chips[0].gameObject.SetActive(false);
                 chips.RemoveAt(0);
             }
-            else
-            {
-                c = Instantiate(chipPrefab, transform);
-            }
+
+            WoodChip c = Factory.Instance.GetWoodChip();
+            if (c == null) return;
             chips.Add(c);
 
             Vector2 dir = Random.insideUnitCircle.normalized;
@@ -295,7 +299,7 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
 
         finished = true;
 
-        string glyph = glyphs[glyphIndex];
+        string glyph = currentGlyph;
         string grade = GetGrade();
 
         bool success = Overshoot < maxOvershoot
@@ -317,8 +321,60 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     private System.Collections.IEnumerator NextGlyph(bool success)
     {
         yield return new WaitForSeconds(1.5f);
-        if (success) glyphIndex = (glyphIndex + 1) % glyphs.Length;   // 실패하면 같은 글자를 다시
-        Begin(glyphGuide.Show(glyphs[glyphIndex]));
+        if (success) Close();                           // 성공: 글자 선택 화면으로 돌아감
+        else Begin(glyphGuide.Show(currentGlyph));      // 실패: 같은 글자를 다시
+    }
+
+    // 글자를 정해서 Board를 열기
+    public void Open(string glyph)
+    {
+        StopAllCoroutines();
+        currentGlyph = glyph;
+        SetVisible(true);
+        Begin(glyphGuide.Show(glyph));   // 가이드 변경 + 판 비우기 + 일치율 0%로 초기화
+    }
+
+    // Board 닫기 (글자 선택 화면으로)
+    public void Close()
+    {
+        StopAllCoroutines();
+        SetVisible(false);
+        OnClosed?.Invoke();
+    }
+
+    private void SetVisible(bool on)
+    {
+        IsOpen = on;
+        group.alpha = on ? 1f : 0f;
+        group.interactable = on;
+        group.blocksRaycasts = on;   // 숨겨진 동안 터치도 막음
+    }
+
+    // 하던 조각을 버리고 조용히 닫기 (글자 선택 화면은 띄우지 않음)
+    public void Cancel()
+    {
+        StopAllCoroutines();
+
+        System.Array.Clear(depth, 0, depth.Length);
+        System.Array.Clear(counted, 0, counted.Length);
+        hit = overshoot = 0;
+        strokeUsed = 0f;
+        finished = false;
+
+        result.SetPixels32(clearPixels);
+        result.Apply();
+
+        ClearChips();
+
+        SetVisible(false);
+    }
+
+    // 모든 조각을 풀로 돌려보내기
+    private void ClearChips()
+    {
+        foreach (var c in chips)
+            if (c != null) c.gameObject.SetActive(false);   // 비활성화되면 풀의 레디큐로 자동 복귀
+        chips.Clear();
     }
 
     private void LateUpdate()

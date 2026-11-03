@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-public class WoodChip : MonoBehaviour
+public class WoodChip : RecycleObject
 {
     [SerializeField] private float friction = 4f;   // 클수록 빨리 멈춤
 
