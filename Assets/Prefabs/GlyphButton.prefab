@@ -188,8 +188,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: "\u3131"
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: f783265b9701f8a4b99175705b4b9d23, type: 2}
-  m_sharedMaterial: {fileID: 4580515061878545768, guid: f783265b9701f8a4b99175705b4b9d23, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 7590b48af4850b64ea49d8857490854a, type: 2}
+  m_sharedMaterial: {fileID: 8818055521559177066, guid: 7590b48af4850b64ea49d8857490854a, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []

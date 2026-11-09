@@ -66,4 +66,9 @@ public class GlyphPicker : MonoBehaviour
         group.interactable = on;
         group.blocksRaycasts = on;
     }
+
+    public void Hide()
+    {
+        SetVisible(false);
+    }
 }

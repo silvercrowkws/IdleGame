@@ -15,7 +15,8 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     private float strokeUsed;
 
     [Header("조각 느낌")]
-    [SerializeField, Range(0.01f, 0.3f)] private float carveStrength = 0.06f;
+    [SerializeField, Range(0.01f, 0.6f)] private float carveStrength = 0.15f;
+    private float stampCarry;   // 마지막 도장 이후 움직인 거리
     [SerializeField, Range(0f, 1f)] private float roughness = 0.6f;
 
     [Header("나무 조각")]    
@@ -49,6 +50,8 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     private Vector2Int last;
     private Vector2 lastLocal;
 
+    [SerializeField] private CanvasGroup controls;   // 뒤로, 결과, 완료 버튼 묶음
+
     private int targetCount, hit, overshoot;
     private readonly List<WoodChip> chips = new List<WoodChip>();
     private float chipAcc;
@@ -57,6 +60,13 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     public float Coverage => targetCount == 0 ? 0f : (float)hit / targetCount;
     public float Overshoot => targetCount == 0 ? 0f : (float)overshoot / targetCount;
     public float Accuracy => Mathf.Clamp01(Coverage - 0.5f * Overshoot);
+
+
+    [Header("후~ 불기")]
+    [SerializeField] private BreathInput breath;
+    [SerializeField] private Vector2 windDir = Vector2.up;   // 바람 방향 (마이크가 폰 아래쪽에 있어서 위로)
+    [SerializeField] private float windAccel = 3000f;         // 최대 세기일 때의 힘
+
 
     private void Awake()
     {
@@ -141,7 +151,10 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         hasLast = false;
         if (ToPixel(e, out Vector2Int p))
         {
-            CarveLine(p, p);
+            Stamp(p.x, p.y);
+            stampCarry = 0f;
+            dirty = true;
+
             last = p;
             hasLast = true;
         }
@@ -198,13 +211,18 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     // ---------- 조각 ----------
     private void CarveLine(Vector2Int a, Vector2Int b)
     {
+        float spacing = Mathf.Max(1f, brushRadius * 0.5f);
         float dist = Vector2Int.Distance(a, b);
-        int steps = Mathf.Max(1, Mathf.CeilToInt(dist / (brushRadius * 0.5f)));
-        for (int i = 0; i <= steps; i++)
+
+        // 지난번 도장 이후 남은 거리를 이어서, 일정 간격마다 찍는다
+        float next = spacing - stampCarry;
+        while (next <= dist)
         {
-            Vector2 p = Vector2.Lerp(a, b, (float)i / steps);
+            Vector2 p = Vector2.Lerp(a, b, next / dist);
             Stamp(Mathf.RoundToInt(p.x), Mathf.RoundToInt(p.y));
+            next += spacing;
         }
+        stampCarry = spacing - (next - dist);
         dirty = true;
     }
 
@@ -222,6 +240,7 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
                 if (px < 0 || px >= w) continue;
 
                 int i = py * w + px;
+                if (surface[i].a < 128) continue;   // 나무판 밖(투명한 곳)은 파지 않음
                 float d = Mathf.Sqrt(x * x + y * y) / r;
 
                 if (d > 1f - roughness * 0.3f * grain[i]) continue;
@@ -266,6 +285,7 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
             WoodChip c = Factory.Instance.GetWoodChip();
             if (c == null) return;
             chips.Add(c);
+            c.onGone = OnChipGone;
 
             Vector2 dir = Random.insideUnitCircle.normalized;
             c.Launch(localPos, dir * Random.Range(150f, 450f), Random.Range(-540f, 540f), Random.Range(16f, 34f));
@@ -331,6 +351,8 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         StopAllCoroutines();
         currentGlyph = glyph;
         SetVisible(true);
+        if (breath != null) breath.StartListening();
+
         Begin(glyphGuide.Show(glyph));   // 가이드 변경 + 판 비우기 + 일치율 0%로 초기화
     }
 
@@ -339,6 +361,8 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     {
         StopAllCoroutines();
         SetVisible(false);
+        if (breath != null) breath.StopListening();
+
         OnClosed?.Invoke();
     }
 
@@ -348,6 +372,13 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         group.alpha = on ? 1f : 0f;
         group.interactable = on;
         group.blocksRaycasts = on;   // 숨겨진 동안 터치도 막음
+
+        if (controls != null)
+        {
+            controls.alpha = on ? 1f : 0f;
+            controls.interactable = on;
+            controls.blocksRaycasts = on;
+        }
     }
 
     // 하던 조각을 버리고 조용히 닫기 (글자 선택 화면은 띄우지 않음)
@@ -367,6 +398,7 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         ClearChips();
 
         SetVisible(false);
+        if (breath != null) breath.StopListening();
     }
 
     // 모든 조각을 풀로 돌려보내기
@@ -383,5 +415,22 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         result.Apply();
         UpdateResultText();
         dirty = false;
+    }
+
+    // 조각이 날아가서 사라질 때 목록에서 빼기
+    private void OnChipGone(WoodChip c)
+    {
+        chips.Remove(c);
+    }
+
+    private void Update()
+    {
+        if (!IsOpen || breath == null || chips.Count == 0) return;
+
+        float power = breath.Power;
+        if (power <= 0f) return;
+
+        for (int i = chips.Count - 1; i >= 0; i--)
+            chips[i].Blow(windDir, windAccel * power, Time.deltaTime);
     }
 }

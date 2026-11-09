@@ -5,6 +5,11 @@ public class WoodChip : RecycleObject
 {
     [SerializeField] private float friction = 4f;   // 클수록 빨리 멈춤
 
+    public System.Action<WoodChip> onGone;   // 날아가서 사라질 때 알림
+    private bool blown;
+    private float blownTime;
+    private float windResist;                // 조각마다 바람에 버티는 정도가 다름
+
     private RectTransform rt;
     private Image img;
     private Vector2 vel;
@@ -101,6 +106,10 @@ public class WoodChip : RecycleObject
 
         vel = velocity;
         spin = spinSpeed;
+
+        blown = false;
+        blownTime = 0f;
+        windResist = Random.Range(0.6f, 1.4f);
     }
 
     // 나중에 바람(마이크)으로 밀 때 쓰는 함수
@@ -110,11 +119,41 @@ public class WoodChip : RecycleObject
         spin += Random.Range(-360f, 360f);
     }
 
+    // 바람을 맞음 (dir: 바람 방향, accel: 힘, dt: 프레임 시간)
+    public void Blow(Vector2 dir, float accel, float dt)
+    {
+        // 방향을 조금씩 흩뜨려서 자연스럽게
+        Vector2 d = Quaternion.Euler(0f, 0f, Random.Range(-25f, 25f)) * dir.normalized;
+
+        vel += d * (accel / windResist) * dt;
+        spin += Random.Range(-720f, 720f) * dt;
+        blown = true;
+    }
+
     private void Update()
     {
+        float dt = Time.deltaTime;
+
+        if (blown)
+        {
+            // 날아가는 중: 잠시 뒤 서서히 투명해지다가 사라짐
+            blownTime += dt;
+            float a = 1f - Mathf.Clamp01((blownTime - 0.25f) / 0.5f);
+
+            Color c = img.color;
+            c.a = a;
+            img.color = c;
+
+            if (a <= 0f)
+            {
+                onGone?.Invoke(this);          // 보드의 목록에서 빼도록 알림
+                gameObject.SetActive(false);   // 풀로 복귀
+                return;
+            }
+        }
+
         if (vel.sqrMagnitude < 1f && Mathf.Abs(spin) < 1f) return;
 
-        float dt = Time.deltaTime;
         rt.anchoredPosition += vel * dt;
         rt.Rotate(0f, 0f, spin * dt);
 
