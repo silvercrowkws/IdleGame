@@ -1,9 +1,6 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
-#if UNITY_ANDROID
-using UnityEngine.Android;
-#endif
 
 public class BreathInput : MonoBehaviour
 {
@@ -44,7 +41,12 @@ public class BreathInput : MonoBehaviour
             StopCoroutine(startRoutine);
             startRoutine = null;
         }
-        if (Microphone.IsRecording(device)) Microphone.End(device);
+
+        // 마이크를 실제로 켠 적이 있을 때만 마이크 기능을 건드린다
+        if (listening || clip != null)
+        {
+            if (Microphone.IsRecording(device)) Microphone.End(device);
+        }
 
         listening = false;
         clip = null;
@@ -55,31 +57,12 @@ public class BreathInput : MonoBehaviour
 
     private IEnumerator StartRoutine()
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
-        {
-            Permission.RequestUserPermission(Permission.Microphone);
-            float t = 0f;
-            while (!Permission.HasUserAuthorizedPermission(Permission.Microphone) && t < 20f)
-            {
-                t += Time.unscaledDeltaTime;
-                yield return null;   // 사용자가 허용할 때까지 대기
-            }
-        }
-        if (!Permission.HasUserAuthorizedPermission(Permission.Microphone))
+        // 권한은 게임 시작 때 받아 둠. 여기서는 팝업을 띄우지 않고 상태만 확인한다.
+        if (!MicPermission.IsGranted)
         {
             startRoutine = null;
             yield break;
         }
-#elif UNITY_IOS && !UNITY_EDITOR
-        if (!Application.HasUserAuthorization(UserAuthorization.Microphone))
-            yield return Application.RequestUserAuthorization(UserAuthorization.Microphone);
-        if (!Application.HasUserAuthorization(UserAuthorization.Microphone))
-        {
-            startRoutine = null;
-            yield break;
-        }
-#endif
 
         if (Microphone.devices.Length == 0)
         {
@@ -87,6 +70,8 @@ public class BreathInput : MonoBehaviour
             startRoutine = null;
             yield break;
         }
+
+        yield return null;   // 화면 전환 직후에는 한 프레임 쉬고 시작
 
         device = null;
         clip = Microphone.Start(device, true, 1, SampleRate);
@@ -138,7 +123,8 @@ public class BreathInput : MonoBehaviour
     {
         if (paused)
         {
-            resumeListening = listening;
+            if (!listening) return;        // 마이크를 안 쓰고 있으면 아무것도 안 함
+            resumeListening = true;
             StopListening();
         }
         else if (resumeListening)
@@ -150,6 +136,6 @@ public class BreathInput : MonoBehaviour
 
     private void OnDisable()
     {
-        StopListening();
+        if (listening) StopListening();
     }
 }

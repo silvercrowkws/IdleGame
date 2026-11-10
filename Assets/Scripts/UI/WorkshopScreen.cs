@@ -6,6 +6,7 @@ public class WorkshopScreen : MonoBehaviour
     [SerializeField] private CanvasGroup[] normalUI;   // 공방 중에 숨길 기존 UI (TopUI, BottomUI)
     [SerializeField] private CarvingBoard board;
     [SerializeField] private GlyphPicker picker;
+    [SerializeField] private BreathInput breath;
 
     private CanvasGroup group;
 
@@ -21,6 +22,7 @@ public class WorkshopScreen : MonoBehaviour
         foreach (var g in normalUI) Apply(g, false);
         Apply(group, true);
         picker.Show();
+        breath.StartListening();
     }
 
     // 나가기 버튼이 부르는 함수
@@ -30,6 +32,7 @@ public class WorkshopScreen : MonoBehaviour
         picker.Hide();
         Apply(group, false);
         foreach (var g in normalUI) Apply(g, true);
+        breath.StopListening();
     }
 
     private static void Apply(CanvasGroup g, bool on)

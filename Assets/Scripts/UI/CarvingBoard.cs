@@ -351,8 +351,6 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         StopAllCoroutines();
         currentGlyph = glyph;
         SetVisible(true);
-        if (breath != null) breath.StartListening();
-
         Begin(glyphGuide.Show(glyph));   // 가이드 변경 + 판 비우기 + 일치율 0%로 초기화
     }
 
@@ -361,8 +359,6 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
     {
         StopAllCoroutines();
         SetVisible(false);
-        if (breath != null) breath.StopListening();
-
         OnClosed?.Invoke();
     }
 
@@ -398,7 +394,6 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         ClearChips();
 
         SetVisible(false);
-        if (breath != null) breath.StopListening();
     }
 
     // 모든 조각을 풀로 돌려보내기
