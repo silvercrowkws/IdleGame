@@ -70,7 +70,7 @@ public class IdleHud : MonoBehaviour
         // 서서히 사라짐
         for (float t = 0f; t < 0.5f; t += Time.unscaledDeltaTime)
         {
-            toastText.alpha = 1f - t / 0.5f;
+            toastText.alpha = 1f - t / 0.5f; 
             yield return null;
         }
         toastText.alpha = 0f;
