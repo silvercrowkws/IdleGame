@@ -5,7 +5,7 @@ using System.Globalization;
 using UnityEngine;
 using UnityEngine.Networking;
 
-// 앵커(검증된 네트워크 시각) + 단조 시계로 인터넷이 끊겨도 신뢰 가능한 시각 계산
+/*// 앵커(검증된 네트워크 시각) + 단조 시계로 인터넷이 끊겨도 신뢰 가능한 시각 계산
 public static class TrustedTime
 {
     private static DateTime anchorUtc; 
@@ -28,7 +28,7 @@ public static class TrustedTime
             return anchorUtc.AddSeconds(sec);
         }
     }
-}
+}*/
 
 public class IdleTimeTest : MonoBehaviour
 {

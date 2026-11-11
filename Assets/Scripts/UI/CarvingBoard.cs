@@ -329,6 +329,7 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         {
             resultText.text = $"'{glyph}' 완성!   등급 {grade}   (정확도 {Accuracy * 100f:F0}%)";
             OnCarved?.Invoke(glyph, Accuracy, grade);   // 나중에 인벤토리가 이 신호를 받음
+            JamoInventory.Instance.Add(glyph);          // 신호를 받아서 자모 인벤토리에 추가
         }
         else
         {

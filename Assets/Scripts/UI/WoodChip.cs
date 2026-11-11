@@ -3,11 +3,14 @@ using UnityEngine.UI;
 
 public class WoodChip : RecycleObject
 {
-    [SerializeField] private float friction = 4f;   // 클수록 빨리 멈춤
+    [SerializeField] private float friction = 4f;           // 클수록 빨리 멈춤
+    [SerializeField] private float fadeTime = 0.5f;         // 판 밖에서 완전히 사라지기까지 걸리는 시간
+    [SerializeField] private bool onlyWhenBlown = false;    // true면 바람에 날린 조각만 판 밖에서 사라짐
 
     public System.Action<WoodChip> onGone;   // 날아가서 사라질 때 알림
     private bool blown;
-    private float blownTime;
+    private float outsideTime;      // 판 밖에 머문 시간
+    private RectTransform parentRt; // 부모(ChipPool, Board와 같은 크기)
     private float windResist;                // 조각마다 바람에 버티는 정도가 다름
 
     private RectTransform rt;
@@ -91,6 +94,7 @@ public class WoodChip : RecycleObject
     private void Awake()
     {
         rt = (RectTransform)transform;
+        parentRt = (RectTransform)rt.parent;
         img = GetComponent<Image>();
         BuildShapes();
     }
@@ -108,7 +112,7 @@ public class WoodChip : RecycleObject
         spin = spinSpeed;
 
         blown = false;
-        blownTime = 0f;
+        outsideTime = 0f;
         windResist = Random.Range(0.6f, 1.4f);
     }
 
@@ -134,15 +138,16 @@ public class WoodChip : RecycleObject
     {
         float dt = Time.deltaTime;
 
-        if (blown)
-        {
-            // 날아가는 중: 잠시 뒤 서서히 투명해지다가 사라짐
-            blownTime += dt;
-            float a = 1f - Mathf.Clamp01((blownTime - 0.25f) / 0.5f);
+        // 조각이 나무판(부모 영역) 밖에 있는지 확인
+        bool outside = !parentRt.rect.Contains(rt.localPosition);
+        if (onlyWhenBlown && !blown) outside = false;
 
-            Color c = img.color;
-            c.a = a;
-            img.color = c;
+        if (outside)
+        {
+            // 판 밖: 서서히 투명해지다가 사라짐
+            outsideTime += dt;
+            float a = 1f - Mathf.Clamp01(outsideTime / fadeTime);
+            SetAlpha(a);
 
             if (a <= 0f)
             {
@@ -150,6 +155,12 @@ public class WoodChip : RecycleObject
                 gameObject.SetActive(false);   // 풀로 복귀
                 return;
             }
+        }
+        else if (outsideTime > 0f)
+        {
+            // 판 안으로 돌아오면 원래대로
+            outsideTime = 0f;
+            SetAlpha(1f);
         }
 
         if (vel.sqrMagnitude < 1f && Mathf.Abs(spin) < 1f) return;
@@ -160,5 +171,12 @@ public class WoodChip : RecycleObject
         float slow = Mathf.Exp(-friction * dt);
         vel *= slow;
         spin *= slow;
+    }
+
+    private void SetAlpha(float a)
+    {
+        Color c = img.color;
+        c.a = a;
+        img.color = c;
     }
 }

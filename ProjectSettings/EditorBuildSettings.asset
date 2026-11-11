@@ -11,7 +11,10 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/Test_1_WordSearchTest.unity
     guid: c859346cd5e87644ca05ef9d1d961799
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/Test_2_Carving.unity
     guid: 6a9978a360224c54facde5176391c27e
+  - enabled: 1
+    path: Assets/Scenes/Test_3_Idle.unity
+    guid: 336b1de0aad17ef49900b04552fee8dc
   m_configObjects: {}
