@@ -714,7 +714,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 39712fc76361b6040bfb482d0da1655f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  secondsPerJamo: 10
+  secondsPerJamo: 300
   maxOfflineSeconds: 28800
   minReportSeconds: 30
 --- !u!1 &257382151

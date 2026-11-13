@@ -141,4 +141,12 @@ public class JamoInventory : Singleton<JamoInventory>
         try { if (File.Exists(FilePath)) File.Delete(FilePath); } catch { }
         Debug.Log("자모 인벤토리를 초기화했습니다.");
     }
+
+
+
+    [ContextMenu("테스트: 모든 자모 +5")]
+    private void DebugAddAll()
+    {
+        foreach (char c in JamoTable.All) Add(c.ToString(), 5);
+    }
 }
