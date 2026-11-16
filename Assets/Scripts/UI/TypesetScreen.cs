@@ -22,6 +22,7 @@ public class TypesetScreen : MonoBehaviour
     [SerializeField] private ScrollRect resultScroll;
 
     [Header("규칙")]
+    [Tooltip("해제하면 시험 모드(자모 소모도 inventory.json에 기록도 X)")]
     [SerializeField] private bool consumeOnSuccess = true;   // 단어가 사전에 있으면 쓴 자모를 소모
 
     private const int MaxTyped = 24;
@@ -36,6 +37,14 @@ public class TypesetScreen : MonoBehaviour
     private readonly Dictionary<string, JamoKey> keys = new Dictionary<string, JamoKey>();
     private readonly List<string> typed = new List<string>();
 
+    [Header("나만의 사전")]
+    [SerializeField] private Button registerButton;   // "나만의 사전에 등록할까요?" 버튼 (결과 영역 안)
+
+    /// <summary>
+    /// 나만의 사전에 등록하려고 할 때 (조합된 단어, 쓴 자모 목록)
+    /// </summary>
+    public event Action<string, IReadOnlyList<string>> OnRegisterRequested;
+
     private void Awake()
     {
         group = GetComponent<CanvasGroup>();
@@ -47,6 +56,9 @@ public class TypesetScreen : MonoBehaviour
             k.Setup(g, OnKey);
             keys[g] = k;
         }
+
+        registerButton.onClick.AddListener(RequestRegister);
+        registerButton.gameObject.SetActive(false);
 
         Apply(group, false);   // 처음엔 숨김
     }
@@ -62,13 +74,18 @@ public class TypesetScreen : MonoBehaviour
     {
         if (inventory != null) inventory.OnChanged -= OnCountChanged;
     }
-
+    
     // 조판 버튼이 부르는 함수
     public void Enter()
     {
         foreach (var g in normalUI) Apply(g, false);
         Apply(group, true);
         WordDictionary.Instance.Ensure();
+
+        // 들어올 때마다 이전 입력과 검색 결과를 비움
+        typed.Clear();
+        resultText.text = "";
+        if (resultScroll != null) resultScroll.verticalNormalizedPosition = 1f;
         Refresh();
     }
 
@@ -103,6 +120,8 @@ public class TypesetScreen : MonoBehaviour
     // ---------- 검색 ----------
     public void Search()
     {
+        registerButton.gameObject.SetActive(false);   // 이전 제안을 숨김
+
         if (typed.Count == 0)
         {
             ShowMessage("아래 자모를 눌러 단어를 만들어 보세요.");
@@ -124,19 +143,48 @@ public class TypesetScreen : MonoBehaviour
             return;
         }
 
+        // 대사전에 없는 단어: 자모를 소모하지 않음 (입력 칸에 그대로 남음)
         if (!dict.TryFind(r.text, out List<WordInfo> meanings))
         {
-            ShowMessage($"'{r.text}'은(는) 사전에 없는 단어예요.");   // 자모는 그대로 둠
+            // 나만의 사전에 이미 있는 단어: 뜻을 보여주고 등록은 제안하지 않음
+            if (MyDictionary.Instance.TryGet(r.text, out MyWord mine))
+            {
+                ShowWord(r.text, new List<WordInfo> { mine.ToInfo() },
+                    $"'{r.text}'은(는) 나만의 사전에 있는 단어예요.\n자모는 소모되지 않았어요.");
+                return;
+            }
+
+            // 어디에도 없는 단어: 나만의 사전 등록을 제안
+            ShowMessage($"'{r.text}'은(는) 사전에 없는 단어예요.\n자모는 소모되지 않았어요.");
+            registerButton.gameObject.SetActive(true);
             return;
         }
 
-        ShowWord(r.text, meanings);
+        // 이미 찾은 단어: 뜻은 보여주되 자모는 소모하지 않음
+        if (inventory.HasWord(r.text))
+        {
+            WordCollection.Instance.Add(r.text);   // 도감에 아직 없으면 채워 넣음 (이미 있으면 무시)
+            ShowWord(r.text, meanings, "이미 찾은 단어예요. 자모는 소모되지 않았어요.");
+            return;
+        }
 
-        if (consumeOnSuccess)
-            foreach (string g in typed) inventory.TryUse(g);
+        // 시험 모드: 소모도 기록도 하지 않음
+        if (!consumeOnSuccess)
+        {
+            ShowWord(r.text, meanings, "(시험 모드) 자모를 소모하거나 기록하지 않았어요.");
+            return;
+        }
 
+        // 새로 찾은 단어: 자모 소모 + 기록
+        foreach (string g in typed) inventory.TryUse(g);
+        inventory.AddWord(r.text);
+        inventory.Save();   // 앱이 꺼져도 잃지 않게 바로 저장
+
+        ShowWord(r.text, meanings, "새로운 단어를 찾았어요! 기록했어요.");
         typed.Clear();
         Refresh();
+
+        WordCollection.Instance.Add(r.text);
         OnWordFound?.Invoke(r.text, meanings);
     }
 
@@ -155,6 +203,8 @@ public class TypesetScreen : MonoBehaviour
 
     private void Refresh()
     {
+        registerButton.gameObject.SetActive(false);
+
         if (inventory == null) return;
 
         var r = HangulComposer.Compose(typed);
@@ -171,10 +221,11 @@ public class TypesetScreen : MonoBehaviour
         if (resultScroll != null) resultScroll.verticalNormalizedPosition = 1f;
     }
 
-    private void ShowWord(string word, List<WordInfo> list)
+    private void ShowWord(string word, List<WordInfo> list, string note)
     {
         var sb = new StringBuilder();
         sb.AppendLine($"<size=72><b>{word}</b></size>");
+        if (!string.IsNullOrEmpty(note)) sb.AppendLine($"<color=#FFD966>{note}</color>");
 
         for (int i = 0; i < list.Count; i++)
         {
@@ -200,5 +251,23 @@ public class TypesetScreen : MonoBehaviour
         g.alpha = on ? 1f : 0f;
         g.interactable = on;
         g.blocksRaycasts = on;
+    }
+
+    // 등록 버튼이 부르는 함수
+    private void RequestRegister()
+    {
+        // 눌린 시점의 입력을 다시 확인 (그 사이에 바뀌었을 수 있음)
+        var r = HangulComposer.Compose(typed);
+        if (!r.complete) return;
+
+        if (OnRegisterRequested == null)
+        {
+            // 나만의 사전 탭이 아직 없을 때의 임시 안내
+            ShowMessage("나만의 사전은 아직 준비 중이에요.");
+            registerButton.gameObject.SetActive(false);
+            return;
+        }
+
+        OnRegisterRequested.Invoke(r.text, typed);
     }
 }

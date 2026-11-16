@@ -355,14 +355,6 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         Begin(glyphGuide.Show(glyph));   // 가이드 변경 + 판 비우기 + 일치율 0%로 초기화
     }
 
-    // Board 닫기 (글자 선택 화면으로)
-    public void Close()
-    {
-        StopAllCoroutines();
-        SetVisible(false);
-        OnClosed?.Invoke();
-    }
-
     private void SetVisible(bool on)
     {
         IsOpen = on;
@@ -376,6 +368,14 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
             controls.interactable = on;
             controls.blocksRaycasts = on;
         }
+    }
+
+    /*// Board 닫기 (글자 선택 화면으로)
+    public void Close()
+    {
+        StopAllCoroutines();
+        SetVisible(false);
+        OnClosed?.Invoke();
     }
 
     // 하던 조각을 버리고 조용히 닫기 (글자 선택 화면은 띄우지 않음)
@@ -395,6 +395,41 @@ public class CarvingBoard : MonoBehaviour, IPointerDownHandler, IDragHandler, IP
         ClearChips();
 
         SetVisible(false);
+    }*/
+
+    // 판을 처음 상태로 되돌림 (파낸 자국, 판정, 나무 조각 모두)
+    private void ResetBoard()
+    {
+        System.Array.Clear(depth, 0, depth.Length);
+        System.Array.Clear(counted, 0, counted.Length);
+        hit = overshoot = 0;
+        strokeUsed = 0f;
+        stampCarry = 0f;
+        chipAcc = 0f;
+        hasLast = false;
+        finished = false;
+
+        result.SetPixels32(clearPixels);
+        result.Apply();
+
+        ClearChips();   // 나무 조각을 풀로 돌려보냄
+    }
+
+    // 하던 조각을 버리고 조용히 닫기 (글자 선택 화면은 띄우지 않음)
+    public void Cancel()
+    {
+        StopAllCoroutines();
+        ResetBoard();
+        SetVisible(false);
+    }
+
+    // Board 닫기 (글자 선택 화면으로)
+    public void Close()
+    {
+        StopAllCoroutines();
+        ResetBoard();
+        SetVisible(false);
+        OnClosed?.Invoke();
     }
 
     // 모든 조각을 풀로 돌려보내기

@@ -14,6 +14,7 @@ public class JamoEntry
 public class SaveData
 {
     public List<JamoEntry> jamo = new List<JamoEntry>();
+    public List<string> foundWords = new List<string>();   // 지금까지 찾은 단어 (찾은 순서)
     public long lastUtcTicks;     // 마지막으로 정산한 신뢰 시각
     public double progress;       // 다음 자모를 만들기까지 쌓인 시간(초)
     public double totalSeconds;   // 총 누적 시간(초)
@@ -26,7 +27,13 @@ public class JamoInventory : Singleton<JamoInventory>
     /// </summary>
     public event Action<string, int> OnChanged;
 
+    /// <summary>
+    /// 새 단어를 찾아 기록했을 때 알림
+    /// </summary>
+    public event Action<string> OnWordAdded;
+
     private readonly Dictionary<string, int> counts = new Dictionary<string, int>();
+    private readonly HashSet<string> found = new HashSet<string>();
     private SaveData data = new SaveData();
     private bool loaded, dirty;
     private float lastSave;
@@ -37,6 +44,11 @@ public class JamoInventory : Singleton<JamoInventory>
     /// 시간 정산 정보(IdleClock이 사용)
     /// </summary>
     public SaveData Meta { get { EnsureLoaded(); return data; } }
+
+    /// <summary>
+    /// 지금까지 찾은 단어 (찾은 순서). 도감이 사용할 예정
+    /// </summary>
+    public IReadOnlyList<string> FoundWords { get { EnsureLoaded(); return data.foundWords; } }
 
     public int Total
     {
@@ -77,6 +89,27 @@ public class JamoInventory : Singleton<JamoInventory>
         return true;
     }
 
+    // ---------- 찾은 단어 ----------
+    public bool HasWord(string word)
+    {
+        EnsureLoaded();
+        return found.Contains(word);
+    }
+
+    /// <summary>
+    /// 찾은 단어로 기록한다. 이미 있으면 false
+    /// </summary>
+    public bool AddWord(string word)
+    {
+        EnsureLoaded();
+        if (!found.Add(word)) return false;
+
+        data.foundWords.Add(word);
+        dirty = true;
+        OnWordAdded?.Invoke(word);
+        return true;
+    }
+
     private void EnsureLoaded()
     {
         if (loaded) return;
@@ -94,8 +127,15 @@ public class JamoInventory : Singleton<JamoInventory>
             data = new SaveData();
         }
 
+        // 예전 저장 파일에는 없는 항목이 비어 있을 수 있음
+        if (data.jamo == null) data.jamo = new List<JamoEntry>();
+        if (data.foundWords == null) data.foundWords = new List<string>();
+
         counts.Clear();
         foreach (var entry in data.jamo) counts[entry.glyph] = entry.count;
+
+        found.Clear();
+        foreach (string w in data.foundWords) found.Add(w);
     }
 
     public void Save()
@@ -133,20 +173,28 @@ public class JamoInventory : Singleton<JamoInventory>
     }
 
     [ContextMenu("전체 초기화 (저장 파일 삭제)")]
-    private void ResetAll()
+    public void ResetAll()
     {
         loaded = true;
         counts.Clear();
+        found.Clear();
         data = new SaveData();
         try { if (File.Exists(FilePath)) File.Delete(FilePath); } catch { }
         Debug.Log("자모 인벤토리를 초기화했습니다.");
     }
 
-
-
     [ContextMenu("테스트: 모든 자모 +5")]
     private void DebugAddAll()
     {
         foreach (char c in JamoTable.All) Add(c.ToString(), 5);
+    }
+
+    [ContextMenu("테스트: 찾은 단어 모두 지우기")]
+    private void DebugClearWords()
+    {
+        found.Clear();
+        data.foundWords.Clear();
+        dirty = true;
+        Debug.Log("찾은 단어 목록을 지웠습니다.");
     }
 }
