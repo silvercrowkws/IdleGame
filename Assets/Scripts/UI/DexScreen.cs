@@ -412,7 +412,7 @@ public class DexScreen : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDra
         else if (RectTransformUtility.RectangleContainsScreenPoint(rightText.rectTransform, e.position, cam))
             word = WordAtLine(rightText, true, e.position, cam);
 
-        if (word != null) popup.Show(word);
+        if (word != null) popup.Show(word); 
     }
 
     private string WordAtLine(TMP_Text text, bool isRight, Vector2 pos, Camera cam)
