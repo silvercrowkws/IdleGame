@@ -45,6 +45,9 @@ public class TypesetScreen : MonoBehaviour
     /// </summary>
     public event Action<string, IReadOnlyList<string>> OnRegisterRequested;
 
+    [Header("잉크")]
+    [SerializeField] private int inkPerWordChar = 5;   // 새 단어 한 글자당 얻는 잉크
+
     private void Awake()
     {
         group = GetComponent<CanvasGroup>();
@@ -178,9 +181,12 @@ public class TypesetScreen : MonoBehaviour
         // 새로 찾은 단어: 자모 소모 + 기록
         foreach (string g in typed) inventory.TryUse(g);
         inventory.AddWord(r.text);
+
+        long gained = r.text.Length * inkPerWordChar;
+        inventory.AddInk(gained);
         inventory.Save();   // 앱이 꺼져도 잃지 않게 바로 저장
 
-        ShowWord(r.text, meanings, "새로운 단어를 찾았어요! 기록했어요.");
+        ShowWord(r.text, meanings, $"새로운 단어를 찾았어요! 기록했어요.\n잉크 +{gained}");
         typed.Clear();
         Refresh();
 

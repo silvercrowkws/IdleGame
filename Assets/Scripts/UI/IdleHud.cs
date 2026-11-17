@@ -56,6 +56,9 @@ public class IdleHud : MonoBehaviour
             msg = $"자모 {glyphs.Count}개 획득!";
         }
 
+        int ink = glyphs.Count * clock.InkPerJamo;
+        if (ink > 0) msg += $"  <color=#8FD3FF>잉크 +{ink}</color>";
+
         if (toast != null) StopCoroutine(toast);
         toast = StartCoroutine(ToastRoutine(msg));
     }

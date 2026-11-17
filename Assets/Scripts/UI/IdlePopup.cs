@@ -73,6 +73,8 @@ public class IdlePopup : MonoBehaviour
                 sb.Append($"{g} x{n}");
                 sb.Append(++col % 4 == 0 ? "\n" : "     ");
             }
+
+            sb.Append($"\n\n잉크 +{r.ink}");
             listText.text = sb.ToString();
         }
 

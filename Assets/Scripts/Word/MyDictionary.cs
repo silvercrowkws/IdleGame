@@ -72,6 +72,23 @@ public class MyDictionary : Singleton<MyDictionary>
         return true;
     }
 
+    public int Count { get { EnsureLoaded(); return data.words.Count; } }
+
+    /// <summary>
+    /// 단어를 지운다. 없으면 false
+    /// </summary>
+    public bool Remove(string word)
+    {
+        EnsureLoaded();
+        if (!map.TryGetValue(word, out MyWord w)) return false;
+
+        data.words.Remove(w);
+        map.Remove(word);
+        Save();
+        OnChanged?.Invoke();
+        return true;
+    }
+
     private void EnsureLoaded()
     {
         if (loaded) return;

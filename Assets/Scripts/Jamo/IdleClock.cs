@@ -11,6 +11,7 @@ public class IdleReport
     public double countedSeconds;   // 생산에 반영한 시간 (최대치 적용)
     public bool capped;             // 최대 시간에 걸렸는지
     public List<string> produced = new List<string>();   // 그동안 만들어진 자모
+    public int ink;                 // 그동안 얻은 잉크
 }
 
 public class IdleClock : Singleton<IdleClock>
@@ -62,6 +63,9 @@ public class IdleClock : Singleton<IdleClock>
     private DateTime lastTick;
     private float saveTimer;
 
+    [SerializeField] private int inkPerJamo = 1;   // 방치로 자모 1개를 만들 때 얻는 잉크
+    public int InkPerJamo => inkPerJamo;
+
     private void Start()
     {
         if (!syncing) StartCoroutine(Sync());
@@ -109,6 +113,7 @@ public class IdleClock : Singleton<IdleClock>
             string g = JamoTable.RandomGlyph();
             JamoInventory.Instance.Add(g);
             produced.Add(g);
+            JamoInventory.Instance.AddInk(inkPerJamo);
         }
         return produced;
     }
@@ -151,6 +156,8 @@ public class IdleClock : Singleton<IdleClock>
             capped = gap > maxOfflineSeconds,
             produced = AddProgress(counted)
         };
+
+        report.ink = report.produced.Count * inkPerJamo;
 
         lastTick = net.Value;
         meta.lastUtcTicks = net.Value.Ticks;
