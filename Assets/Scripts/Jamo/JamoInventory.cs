@@ -226,7 +226,7 @@ public class JamoInventory : Singleton<JamoInventory>
         found.Clear();
         data.jamo.Clear();
         data.foundWords.Clear();
-        data.progress = 0;
+        data.progress = 0; 
         data.totalSeconds = 0;
         data.ink = 0;
         dirty = false;
