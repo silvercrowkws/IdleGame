@@ -212,7 +212,7 @@ public class TypesetScreen : MonoBehaviour
             int lengthBonus = Mathf.Max(0, r.text.Length - 2) * lengthBonusPerChar;
             bonus = comboBonus + lengthBonus;
             inventory.SetChain(r.text, combo);
-            chainNote = $"\n끝말잇기 성공!  콤보 {combo}  (기본 {basePoints} + 콤보 {comboBonus} + 길이 {lengthBonus})";
+            chainNote = $"\n끝말잇기 성공!  콤보 {combo}  (기본 {basePoints} + 콤보 {comboBonus} + 길이 {lengthBonus})"; 
         }
         else if (chainable)
         {
