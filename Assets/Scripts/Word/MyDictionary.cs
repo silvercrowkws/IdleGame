@@ -89,6 +89,20 @@ public class MyDictionary : Singleton<MyDictionary>
         return true;
     }
 
+    /// <summary>
+    /// 단어의 뜻을 바꾼다. 없으면 false
+    /// </summary>
+    public bool SetDefinition(string word, string definition)
+    {
+        EnsureLoaded();
+        if (!map.TryGetValue(word, out MyWord w)) return false;
+
+        w.definition = definition;
+        Save();
+        OnChanged?.Invoke();
+        return true;
+    }
+
     private void EnsureLoaded()
     {
         if (loaded) return;
@@ -143,5 +157,20 @@ public class MyDictionary : Singleton<MyDictionary>
         Save();
         OnChanged?.Invoke();
         Debug.Log("나만의 사전을 비웠습니다.");
+    }
+
+    [ContextMenu("테스트: 샘플 단어 50개 추가")]
+    private void DebugAddMany()
+    {
+        string[] names =
+        {
+        "가", "가방", "가을", "가위", "거미", "거울", "계란", "고래", "공책", "구름",
+        "기차", "나라", "나무", "나비", "나이", "노래", "눈사람", "다람쥐", "다리", "도시",
+        "돼지", "라디오", "라면", "마늘", "마음", "모자", "무지개", "바나나", "바다", "바람",
+        "별", "사과", "사랑", "사슴", "소금", "수박", "아기", "아침", "여름", "우산",
+        "의자", "인형", "자두", "자전거", "장미", "차례", "차표", "책", "침대", "카메라"
+    };
+        foreach (string n in names)
+            Add(new MyWord { word = n, type = "나만의 말", field = "없음", definition = "테스트로 등록한 말." });
     }
 }

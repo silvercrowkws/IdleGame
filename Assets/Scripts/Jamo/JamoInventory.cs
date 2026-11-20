@@ -19,6 +19,11 @@ public class SaveData
     public double progress;       // 다음 자모를 만들기까지 쌓인 시간(초)
     public double totalSeconds;   // 총 누적 시간(초)
     public long ink;   // 보유 잉크
+
+    public long points;                // 보유 포인트
+    public int combo;                  // 끝말잇기 콤보
+    public int bestCombo;              // 최고 콤보
+    public string chainWord = "";      // 직전에 이은 단어 (한 글자 단어는 제외)
 }
 
 public class JamoInventory : Singleton<JamoInventory>
@@ -37,6 +42,16 @@ public class JamoInventory : Singleton<JamoInventory>
     /// 잉크가 바뀔 때 알림 (바뀐 뒤 수량)
     /// </summary>
     public event Action<long> OnInkChanged;
+
+    /// <summary>
+    /// 포인트가 바뀔 때 알림 (바뀐 뒤 수량)
+    /// </summary>
+    public event Action<long> OnPointsChanged;
+
+    /// <summary>
+    /// 끝말잇기 상태(직전 단어, 콤보)가 바뀔 때 알림
+    /// </summary>
+    public event Action OnChainChanged;
 
     private readonly Dictionary<string, int> counts = new Dictionary<string, int>();
     private readonly HashSet<string> found = new HashSet<string>();
@@ -121,6 +136,47 @@ public class JamoInventory : Singleton<JamoInventory>
         return true;
     }
 
+    // ---------- 포인트와 끝말잇기 ----------
+    public long Points { get { EnsureLoaded(); return data.points; } }
+    public int Combo { get { EnsureLoaded(); return data.combo; } }
+    public int BestCombo { get { EnsureLoaded(); return data.bestCombo; } }
+    public string LastChainWord { get { EnsureLoaded(); return data.chainWord ?? ""; } }
+
+    public void AddPoints(long n)
+    {
+        if (n <= 0) return;
+        EnsureLoaded();
+        data.points += n;
+        dirty = true;
+        OnPointsChanged?.Invoke(data.points);
+    }
+
+    /// <summary>
+    /// 포인트를 쓴다. 모자라면 false (나중에 상점이 사용)
+    /// </summary>
+    public bool TryUsePoints(long n)
+    {
+        EnsureLoaded();
+        if (n < 0 || data.points < n) return false;
+
+        data.points -= n;
+        dirty = true;
+        OnPointsChanged?.Invoke(data.points);
+        return true;
+    }
+
+    /// <summary>
+    /// 끝말잇기 상태를 바꾼다 (직전 단어와 콤보)
+    /// </summary>
+    public void SetChain(string word, int combo)
+    {
+        EnsureLoaded();
+        data.chainWord = word ?? "";
+        data.combo = Mathf.Max(0, combo);
+        if (data.combo > data.bestCombo) data.bestCombo = data.combo;
+        dirty = true;
+        OnChainChanged?.Invoke();
+    }
 
     // ---------- 찾은 단어 ----------
     public bool HasWord(string word)
@@ -229,6 +285,11 @@ public class JamoInventory : Singleton<JamoInventory>
         data.progress = 0; 
         data.totalSeconds = 0;
         data.ink = 0;
+
+        data.points = 0;
+        data.combo = 0;
+        data.bestCombo = 0;
+        data.chainWord = "";
         dirty = false;
 
         try { if (File.Exists(FilePath)) File.Delete(FilePath); } catch { }
@@ -236,6 +297,8 @@ public class JamoInventory : Singleton<JamoInventory>
         // 화면이 바뀌도록 알림
         foreach (char c in JamoTable.All) OnChanged?.Invoke(c.ToString(), 0);
         OnInkChanged?.Invoke(0);
+        OnPointsChanged?.Invoke(0);
+        OnChainChanged?.Invoke();
 
         Debug.Log("자모 인벤토리를 초기화했습니다.");
     }
@@ -257,4 +320,10 @@ public class JamoInventory : Singleton<JamoInventory>
 
     [ContextMenu("테스트: 잉크 +100")]
     private void DebugAddInk() { AddInk(100); }
+
+    [ContextMenu("테스트: 포인트 +100")]
+    private void DebugAddPoints() { AddPoints(100); }
+
+    [ContextMenu("테스트: 끝말잇기 초기화")]
+    private void DebugResetChain() { SetChain("", 0); }
 }

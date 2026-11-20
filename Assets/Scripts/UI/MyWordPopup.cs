@@ -19,6 +19,8 @@ public class MyWordPopup : MonoBehaviour
 
     public bool IsOpen { get; private set; }
 
+    public event System.Action<MyWord> OnEditRequested;   // 수정 버튼을 눌렀을 때
+
     private void Awake()
     {
         group = GetComponent<CanvasGroup>();
@@ -45,6 +47,16 @@ public class MyWordPopup : MonoBehaviour
     {
         Disarm();
         Apply(false);
+    }
+
+    // 수정 버튼이 부르는 함수
+    public void Edit()
+    {
+        if (current == null) return;
+
+        MyWord word = current;
+        Hide();
+        OnEditRequested?.Invoke(word);
     }
 
     // 삭제 버튼이 부르는 함수: 두 번 눌러야 지워짐

@@ -12,11 +12,12 @@ public class MyDictScreen : MonoBehaviour
     [SerializeField] private TypesetScreen typeset;    // 조판의 "나만의 사전에 등록할까요?" 버튼을 받음
 
     [Header("목록")]
+    //[SerializeField] private Button rowPrefab;
+    //[SerializeField] private Transform listContent;
+    //[SerializeField] private GameObject emptyText;
     [SerializeField] private CanvasGroup listPanel;
-    [SerializeField] private Button rowPrefab;
-    [SerializeField] private Transform listContent;
+    [SerializeField] private BookView book;
     [SerializeField] private TMP_Text countText;
-    [SerializeField] private GameObject emptyText;
     [SerializeField] private MyWordPopup popup;
 
     [Header("등록 폼")]
@@ -29,6 +30,7 @@ public class MyDictScreen : MonoBehaviour
     [SerializeField] private TMP_Text infoText;
     [SerializeField] private Button registerButton;
     [SerializeField] private TMP_Text registerLabel;
+    [SerializeField] private GameObject[] hideInEdit;   // [수정] 뜻을 고칠 때 숨길 것 (BackspaceButton, ClearButton)
 
     [Header("규칙 (인스펙터에서 조절)")]
     [SerializeField] private int inkPerMeaningChar = 3;   // 뜻 한 글자당 잉크 (공백 제외)
@@ -41,11 +43,31 @@ public class MyDictScreen : MonoBehaviour
     private JamoInventory inventory;
     private readonly Dictionary<string, JamoKey> keys = new Dictionary<string, JamoKey>();
     private readonly List<string> typed = new List<string>();
-    private bool open, dictReady, armed;
+    private bool open, armed;
+    private bool editing;          // [수정] 뜻 수정 중인지
+    private MyWord editTarget;     // [수정] 고치는 중인 단어
     private string defaultRegisterLabel;
-    private Coroutine armRoutine, flashRoutine;
+    private Coroutine armRoutine, flashRoutine, liveRoutine, dictRoutine;
 
-    private string Meaning => (meaningInput.text ?? "").Trim();
+    private string focusWord;    // 목록을 다시 그릴 때 이 단어가 있는 쪽을 펼침
+    private bool resetBook;      // 탭에 들어올 때는 첫 장부터
+
+    // 입력 칸의 확정된 글자 + (PC에서) 아직 확정되지 않은 한글 조합 중인 글자
+    private string LiveText
+    {
+        get
+        {
+            string s = meaningInput.text ?? "";
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+            s += Input.compositionString ?? "";
+#endif
+
+            return s.Replace("\u200B", "");   // 입력 칸이 붙이는 안 보이는 글자는 뺌
+        }
+    }
+
+    private string Meaning => LiveText.Trim();
     private bool FormVisible => formPanel.alpha > 0.5f;
 
     private void Awake()
@@ -62,6 +84,8 @@ public class MyDictScreen : MonoBehaviour
 
         meaningInput.characterLimit = maxMeaningLength;
         meaningInput.onValueChanged.AddListener(_ => RefreshForm());
+        meaningInput.onSelect.AddListener(_ => StartLiveWatch());       // 입력창을 누르면 확인 시작
+        meaningInput.onDeselect.AddListener(_ => OnFieldDeselected());  // 벗어나면 확인 끝
         defaultRegisterLabel = registerLabel.text;
 
         Apply(group, false);
@@ -76,6 +100,9 @@ public class MyDictScreen : MonoBehaviour
         inventory.OnInkChanged += OnInkChanged;
         MyDictionary.Instance.OnChanged += OnDictChanged;
         if (typeset != null) typeset.OnRegisterRequested += OnRegisterRequested;
+        if (popup != null) popup.OnEditRequested += BeginEdit;   // [수정]
+
+        book.OnWordClicked += OnBookWordClicked;
     }
 
     private void OnDestroy()
@@ -87,17 +114,9 @@ public class MyDictScreen : MonoBehaviour
         }
         if (MyDictionary.Instance != null) MyDictionary.Instance.OnChanged -= OnDictChanged;
         if (typeset != null) typeset.OnRegisterRequested -= OnRegisterRequested;
-    }
+        if (popup != null) popup.OnEditRequested -= BeginEdit;   // [수정]
 
-    private void Update()
-    {
-        // 사전을 다 불러오면 폼의 안내 문구를 갱신
-        if (!open || dictReady) return;
-        if (WordDictionary.Instance.IsLoaded)
-        {
-            dictReady = true;
-            if (FormVisible) RefreshForm();
-        }
+        if (book != null) book.OnWordClicked -= OnBookWordClicked;
     }
 
     // ---------- 화면 전환 ----------
@@ -107,10 +126,10 @@ public class MyDictScreen : MonoBehaviour
         foreach (var g in normalUI) Apply(g, false);
         Apply(group, true);
         open = true;
+        resetBook = true;   // 탭에 들어올 때마다 첫 장부터
 
         popup.Hide();
         WordDictionary.Instance.Ensure();
-        dictReady = WordDictionary.Instance.IsLoaded;
         ShowList();
     }
 
@@ -119,6 +138,8 @@ public class MyDictScreen : MonoBehaviour
     {
         open = false;
         popup.Hide();
+        StopLiveWatch();
+        if (dictRoutine != null) { StopCoroutine(dictRoutine); dictRoutine = null; }
         meaningInput.DeactivateInputField();
         Disarm();
         Apply(group, false);
@@ -127,8 +148,10 @@ public class MyDictScreen : MonoBehaviour
 
     private void ShowList()
     {
+        EndEdit();   // [수정]
         Apply(formPanel, false);
         Apply(listPanel, true);
+        StopLiveWatch();
         meaningInput.DeactivateInputField();
         Disarm();
         RebuildList();
@@ -139,6 +162,8 @@ public class MyDictScreen : MonoBehaviour
         Apply(listPanel, false);
         Apply(formPanel, true);
         WordDictionary.Instance.Ensure();
+        if (!WordDictionary.Instance.IsLoaded && dictRoutine == null)
+            dictRoutine = StartCoroutine(WaitDictionary());
         RefreshForm();
     }
 
@@ -172,25 +197,54 @@ public class MyDictScreen : MonoBehaviour
         ShowForm();
     }
 
+    // ---------- 뜻 수정 ----------  [수정] 이 블록 전체가 새로 추가됨
+    // 팝업의 수정 버튼이 부름
+    private void BeginEdit(MyWord word)
+    {
+        if (word == null) return;
+
+        editing = true;
+        editTarget = word;
+        typed.Clear();
+        meaningInput.text = word.definition;   // 기존 뜻을 입력 칸에 넣어 둠
+        SetEditLayout(true);
+        ShowForm();
+    }
+
+    private void EndEdit()
+    {
+        if (!editing) return;
+        editing = false;
+        editTarget = null;
+        SetEditLayout(false);
+    }
+
+    // 수정 중에는 키패드와 자모 버튼을 숨김 (단어 이름은 못 바꾸니까)
+    private void SetEditLayout(bool on)
+    {
+        keypad.gameObject.SetActive(!on);
+        if (hideInEdit == null) return;
+        foreach (var o in hideInEdit) if (o != null) o.SetActive(!on);
+    }
+
     // ---------- 목록 ----------
     private void RebuildList()
     {
-        foreach (Transform child in listContent) Destroy(child.gameObject);
-
-        var words = new List<MyWord>(MyDictionary.Instance.Words);
-        words.Sort((a, b) => b.createdUtcTicks.CompareTo(a.createdUtcTicks));   // 최근에 만든 것부터
+        var names = new List<string>();
+        foreach (MyWord w in MyDictionary.Instance.Words) names.Add(w.word);
+        names.Sort((a, b) => string.CompareOrdinal(a, b));   // 가나다순
 
         if (flashRoutine == null) UpdateCount();
-        emptyText.SetActive(words.Count == 0);
 
-        foreach (MyWord w in words)
-        {
-            MyWord word = w;
-            Button b = Instantiate(rowPrefab, listContent);
-            b.GetComponentInChildren<TMP_Text>().text =
-                $"{word.word}   <size=65%><color=#7A6A55>{Truncate(word.definition, 20)}</color></size>";
-            b.onClick.AddListener(() => popup.Show(word));
-        }
+        book.SetWords(names, focusWord);
+        if (resetBook) { book.GoToFirst(); resetBook = false; }
+        focusWord = null;
+    }
+
+    // 책에서 단어를 눌렀을 때
+    private void OnBookWordClicked(string word)
+    {
+        if (MyDictionary.Instance.TryGet(word, out MyWord entry)) popup.Show(entry);
     }
 
     private void UpdateCount()
@@ -222,6 +276,7 @@ public class MyDictScreen : MonoBehaviour
     // ---------- 등록 폼 ----------
     private void OnKey(string g)
     {
+        if (editing) return;   // [수정]
         if (typed.Count >= MaxTyped || Available(g) <= 0) return;
         typed.Add(g);
         RefreshForm();
@@ -250,6 +305,7 @@ public class MyDictScreen : MonoBehaviour
     private static int CountChars(string s)
     {
         int n = 0;
+        if (string.IsNullOrEmpty(s)) return 0;
         foreach (char c in s) if (!char.IsWhiteSpace(c) && c != '\u200B') n++;
         return n;
     }
@@ -259,14 +315,33 @@ public class MyDictScreen : MonoBehaviour
         if (inventory == null) return;
         Disarm();   // 내용이 바뀌면 "한 번 더 눌러 등록"은 취소
 
+        foreach (var kv in keys) kv.Value.SetCount(Available(kv.Key));
+
+        int chars = CountChars(Meaning);
+
+        // [수정] 뜻 수정 중: 늘어난 글자만큼만 잉크를 받음
+        if (editing && editTarget != null)
+        {
+            int oldChars = CountChars(editTarget.definition);
+            int added = Mathf.Max(0, chars - oldChars);
+            long editCost = added * (long)inkPerMeaningChar;
+            string editHint = CheckEdit(chars, editCost);
+
+            composedText.text = editTarget.word;
+            composedText.color = Color.white;
+            rawText.text = "단어 이름은 바꿀 수 없어요";
+
+            infoText.text = $"뜻 {chars}자 (기존 {oldChars}자)  늘어난 {added}자 x {inkPerMeaningChar} = 잉크 {editCost:N0}   (보유 {inventory.Ink:N0})\n"
+                          + (editHint == null ? "<color=#8FD3FF>수정할 수 있어요</color>" : $"<color=#FFB380>{editHint}</color>");
+            registerButton.interactable = editHint == null;
+            return;
+        }
+
         var r = HangulComposer.Compose(typed);
         composedText.text = typed.Count == 0 ? "자모를 눌러 단어 이름을 만들어 주세요" : r.text;
         composedText.color = (typed.Count == 0 || r.complete) ? Color.white : new Color(1f, 0.75f, 0.5f);
         rawText.text = string.Concat(typed);
 
-        foreach (var kv in keys) kv.Value.SetCount(Available(kv.Key));
-
-        int chars = CountChars(Meaning);
         long cost = chars * (long)inkPerMeaningChar;
         string hint = Check(r, chars, cost);
 
@@ -292,11 +367,51 @@ public class MyDictScreen : MonoBehaviour
         return null;
     }
 
-    // "등록" 버튼: 첫 번째는 확인, 두 번째에 실제로 등록
+    // [수정] 뜻을 고칠 수 없는 이유를 돌려준다. 고칠 수 있으면 null
+    private string CheckEdit(int chars, long cost)
+    {
+        if (chars == 0) return "뜻을 적어 주세요.";
+        if (Meaning == editTarget.definition) return "바뀐 내용이 없어요.";
+        if (inventory.Ink < cost) return $"잉크가 부족해요. (필요 {cost:N0})";
+        return null;
+    }
+
+    // "등록"(수정 중에는 "수정") 버튼: 첫 번째는 확인, 두 번째에 실제로 처리
     public void OnRegisterClicked()
     {
-        var r = HangulComposer.Compose(typed);
         int chars = CountChars(Meaning);
+
+        // [수정] 뜻 수정
+        if (editing && editTarget != null)
+        {
+            int added = Mathf.Max(0, chars - CountChars(editTarget.definition));
+            long editCost = added * (long)inkPerMeaningChar;
+
+            if (CheckEdit(chars, editCost) != null) { RefreshForm(); return; }
+
+            if (!armed)
+            {
+                armed = true;
+                registerLabel.text = "한 번 더 눌러 수정";
+                armRoutine = StartCoroutine(DisarmLater());
+                return;
+            }
+
+            Disarm();
+
+            string editedWord = editTarget.word;
+            inventory.TryUseInk(editCost);   // 줄어든 만큼은 돌려주지 않음
+            MyDictionary.Instance.SetDefinition(editedWord, Meaning);
+            inventory.Save();
+
+            focusWord = editedWord;
+            meaningInput.text = "";
+            ShowList();
+            ShowFlash($"'{editedWord}'의 뜻을 고쳤어요!");
+            return;
+        }
+
+        var r = HangulComposer.Compose(typed);
         long cost = chars * (long)inkPerMeaningChar;
 
         if (Check(r, chars, cost) != null) { RefreshForm(); return; }
@@ -324,6 +439,7 @@ public class MyDictScreen : MonoBehaviour
         });
         inventory.Save();
 
+        focusWord = r.text;
         typed.Clear();
         meaningInput.text = "";
         ShowList();
@@ -341,7 +457,7 @@ public class MyDictScreen : MonoBehaviour
     {
         armed = false;
         if (armRoutine != null) { StopCoroutine(armRoutine); armRoutine = null; }
-        if (registerLabel != null) registerLabel.text = defaultRegisterLabel;
+        if (registerLabel != null) registerLabel.text = editing ? "수정" : defaultRegisterLabel;   // [수정]
     }
 
     // ---------- 변화 알림 ----------
@@ -365,5 +481,47 @@ public class MyDictScreen : MonoBehaviour
         g.alpha = on ? 1f : 0f;
         g.interactable = on;
         g.blocksRaycasts = on;
+    }
+
+    // ---------- 뜻 입력 확인 ----------
+    // 한글을 치는 동안은 조합 중인 글자가 값에 들어오지 않아서, 입력 중일 때만 짧은 간격으로 확인한다
+    private void StartLiveWatch()
+    {
+        if (liveRoutine == null) liveRoutine = StartCoroutine(LiveWatch());
+    }
+
+    private void StopLiveWatch()
+    {
+        if (liveRoutine != null) { StopCoroutine(liveRoutine); liveRoutine = null; }
+    }
+
+    private void OnFieldDeselected()
+    {
+        StopLiveWatch();
+        if (open && FormVisible) RefreshForm();   // 입력이 끝났을 때 한 번 정리
+    }
+
+    private IEnumerator LiveWatch()
+    {
+        string last = LiveText;
+        while (true)
+        {
+            yield return new WaitForSecondsRealtime(0.1f);
+
+            string live = LiveText;
+            if (live == last) continue;
+
+            last = live;
+            RefreshForm();
+        }
+    }
+
+    private IEnumerator WaitDictionary()
+    {
+        while (!WordDictionary.Instance.IsLoaded)
+            yield return new WaitForSecondsRealtime(0.3f);
+
+        dictRoutine = null;
+        if (open && FormVisible) RefreshForm();
     }
 }

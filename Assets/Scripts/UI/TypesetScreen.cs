@@ -48,6 +48,14 @@ public class TypesetScreen : MonoBehaviour
     [Header("잉크")]
     [SerializeField] private int inkPerWordChar = 5;   // 새 단어 한 글자당 얻는 잉크
 
+    [Header("끝말잇기 포인트")]
+    [SerializeField] private int pointsPerChar = 10;     // 단어 한 글자당 기본 포인트
+    [SerializeField] private int chainBonusBase = 5;     // 끝말잇기 성공 보너스 (콤보 1일 때)
+    [SerializeField] private int bonusPerCombo = 2;      // 콤보가 하나 늘 때마다 보너스에 더함
+    [SerializeField] private int maxChainBonus = 24;     // 보너스 상한
+    [SerializeField] private int lengthBonusPerChar = 5; // 3글자부터 글자 하나당 추가 보너스
+    [SerializeField] private TMP_Text chainText;         // 이을 글자와 콤보 안내
+
     private void Awake()
     {
         group = GetComponent<CanvasGroup>();
@@ -90,6 +98,7 @@ public class TypesetScreen : MonoBehaviour
         resultText.text = "";
         if (resultScroll != null) resultScroll.verticalNormalizedPosition = 1f;
         Refresh();
+        RefreshChainHint();
     }
 
     // 나가기 버튼이 부르는 함수
@@ -182,13 +191,42 @@ public class TypesetScreen : MonoBehaviour
         foreach (string g in typed) inventory.TryUse(g);
         inventory.AddWord(r.text);
 
+        // 잉크
         long gained = r.text.Length * inkPerWordChar;
         inventory.AddInk(gained);
+
+        // 포인트와 끝말잇기
+        string prev = inventory.LastChainWord;
+        int oldCombo = inventory.Combo;
+        bool chainable = WordChain.IsChainable(r.text);            // 한 글자 단어는 끝말잇기와 무관
+        bool chained = chainable && WordChain.Follows(prev, r.text);
+
+        long basePoints = r.text.Length * pointsPerChar;
+        long bonus = 0;
+        string chainNote = "";
+
+        if (chained)
+        {
+            int combo = oldCombo + 1;
+            int comboBonus = Mathf.Min(chainBonusBase + bonusPerCombo * (combo - 1), maxChainBonus);
+            int lengthBonus = Mathf.Max(0, r.text.Length - 2) * lengthBonusPerChar;
+            bonus = comboBonus + lengthBonus;
+            inventory.SetChain(r.text, combo);
+            chainNote = $"\n끝말잇기 성공!  콤보 {combo}  (기본 {basePoints} + 콤보 {comboBonus} + 길이 {lengthBonus})";
+        }
+        else if (chainable)
+        {
+            inventory.SetChain(r.text, 0);   // 이어지지 않으면 콤보가 끊기고 이 단어가 새 출발점
+            if (oldCombo > 0) chainNote = $"\n끝말잇기가 끊겼어요. (콤보 {oldCombo} → 0)";
+        }
+
+        inventory.AddPoints(basePoints + bonus);
         inventory.Save();   // 앱이 꺼져도 잃지 않게 바로 저장
 
-        ShowWord(r.text, meanings, $"새로운 단어를 찾았어요! 기록했어요.\n잉크 +{gained}");
+        ShowWord(r.text, meanings, $"새로운 단어를 찾았어요! 기록했어요.\n잉크 +{gained}  포인트 +{basePoints + bonus}{chainNote}");
         typed.Clear();
         Refresh();
+        RefreshChainHint();
 
         WordCollection.Instance.Add(r.text);
         OnWordFound?.Invoke(r.text, meanings);
@@ -205,6 +243,16 @@ public class TypesetScreen : MonoBehaviour
     private void OnCountChanged(string glyph, int count)
     {
         if (keys.TryGetValue(glyph, out JamoKey k)) k.SetCount(Available(glyph));
+    }
+
+    private void RefreshChainHint()
+    {
+        if (chainText == null || inventory == null) return;
+
+        string hint = WordChain.Hint(inventory.LastChainWord);
+        chainText.text = hint == ""
+            ? "끝말잇기\n<size=80%>첫 단어를 찾아 보세요</size>"
+            : $"이을 글자  <b>{hint}</b>\n<size=80%>콤보 {inventory.Combo}</size>";
     }
 
     private void Refresh()
