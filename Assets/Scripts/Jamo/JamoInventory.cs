@@ -325,5 +325,5 @@ public class JamoInventory : Singleton<JamoInventory>
     private void DebugAddPoints() { AddPoints(100); }
 
     [ContextMenu("테스트: 끝말잇기 초기화")]
-    private void DebugResetChain() { SetChain("", 0); }
+    private void DebugResetChain() { SetChain("", 0); } 
 }
