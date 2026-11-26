@@ -63,7 +63,7 @@ public class CharacterController : MonoBehaviour
             if (string.IsNullOrEmpty(name)) continue;
             int hash = Animator.StringToHash(name);
             if (HasTrigger(hash)) actionHashes.Add(hash);
-            else Debug.LogWarning($"[{nameof(CharacterController)}] '{name}' Trigger 가 Animator 에 없어 제외합니다.", this);
+            else Debug.LogWarning($"[{nameof(CharacterController)}] '{name}' Trigger 가 Animator 에 없어 제외합니다.", this); 
         }
     }
 
