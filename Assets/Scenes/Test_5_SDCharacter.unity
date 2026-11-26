@@ -135,6 +135,7 @@ GameObject:
   - component: {fileID: 197175403}
   - component: {fileID: 197175402}
   - component: {fileID: 197175401}
+  - component: {fileID: 197175404}
   m_Layer: 5
   m_Name: Blacksmith
   m_TagString: Untagged
@@ -220,6 +221,26 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 197175399}
   m_CullTransparentMesh: 1
+--- !u!114 &197175404
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 197175399}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8401958195bbc34d91a16f9d4ed03ee, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  idleTag: Idle
+  layer: 0
+  idleRepeatChance: 0.6
+  actionTriggers:
+  - EyeBlink
+  - LookAround
+  - Surprise
+  - Stomp
 --- !u!1 &241226497
 GameObject:
   m_ObjectHideFlags: 0
@@ -494,6 +515,7 @@ GameObject:
   - component: {fileID: 538456258}
   - component: {fileID: 538456257}
   - component: {fileID: 538456256}
+  - component: {fileID: 538456259}
   m_Layer: 5
   m_Name: Woodcaver
   m_TagString: Untagged
@@ -579,6 +601,26 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 538456254}
   m_CullTransparentMesh: 1
+--- !u!114 &538456259
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 538456254}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8401958195bbc34d91a16f9d4ed03ee, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  idleTag: Idle
+  layer: 0
+  idleRepeatChance: 0.6
+  actionTriggers:
+  - EyeBlink
+  - LookAround
+  - Surprise
+  - Stomp
 --- !u!1 &568579171
 GameObject:
   m_ObjectHideFlags: 0
